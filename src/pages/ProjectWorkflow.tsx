@@ -1,9 +1,13 @@
 
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import UploadScreens, { UploadedImage } from "@/components/workflow/UploadScreens";
+import AddDocumentation from "@/components/workflow/AddDocumentation";
+import ImplementationPlaceholder from "@/components/workflow/ImplementationPlaceholder";
+import { toast } from "sonner";
 
 const steps = [
   { id: 1, name: "Upload Screens" },
@@ -14,9 +18,54 @@ const steps = [
 const ProjectWorkflow = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const [currentStep, setCurrentStep] = useState(1);
-  
-  // For now, this is a placeholder implementation
-  // We'll add the actual step content in the next phase
+  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [documentation, setDocumentation] = useState<Record<string, string>>({});
+  const navigate = useNavigate();
+
+  const handleNextFromUpload = (uploadedImages: UploadedImage[]) => {
+    setImages(uploadedImages);
+    setCurrentStep(2);
+  };
+
+  const handlePreviousFromDocs = () => {
+    setCurrentStep(1);
+  };
+
+  const handleNextFromDocs = (updatedImages: UploadedImage[], docs: Record<string, string>) => {
+    setImages(updatedImages);
+    setDocumentation(docs);
+    setCurrentStep(3);
+    toast.success("Documentation completed successfully!");
+  };
+
+  const handlePreviousFromImplementation = () => {
+    setCurrentStep(2);
+  };
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return <UploadScreens onNext={handleNextFromUpload} />;
+      case 2:
+        return (
+          <AddDocumentation 
+            images={images} 
+            onPrevious={handlePreviousFromDocs} 
+            onNext={handleNextFromDocs} 
+          />
+        );
+      case 3:
+        return (
+          <ImplementationPlaceholder 
+            images={images} 
+            documentation={documentation} 
+            onPrevious={handlePreviousFromImplementation} 
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -66,34 +115,13 @@ const ProjectWorkflow = () => {
         </div>
       </div>
       
-      {/* Step Content (Placeholder) */}
+      {/* Step Content */}
       <div className="bg-card p-8 rounded-lg border">
-        <h2 className="text-xl font-semibold mb-4">
+        <h2 className="text-xl font-semibold mb-6">
           Step {currentStep}: {steps.find(s => s.id === currentStep)?.name}
         </h2>
-        <p className="text-muted-foreground mb-6">
-          This is a placeholder for step {currentStep} content. We'll implement the actual functionality in the next phase.
-        </p>
         
-        <div className="flex justify-end gap-4">
-          {currentStep > 1 && (
-            <Button
-              variant="outline"
-              onClick={() => setCurrentStep(prev => Math.max(prev - 1, 1))}
-            >
-              Previous
-            </Button>
-          )}
-          
-          {currentStep < steps.length && (
-            <Button
-              className="bg-indigo-600 hover:bg-indigo-700"
-              onClick={() => setCurrentStep(prev => Math.min(prev + 1, steps.length))}
-            >
-              Next
-            </Button>
-          )}
-        </div>
+        {renderStepContent()}
       </div>
     </div>
   );
