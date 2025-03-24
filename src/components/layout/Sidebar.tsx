@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, ChevronUp, MoreVertical, FilePlus2, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, MoreHorizontal, FilePlus2, Plus } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -40,10 +40,8 @@ const Sidebar = () => {
 
   // Handler for quick access icon click when sidebar is collapsed
   const handleCollapsedToolClick = () => {
-    if (collapsed) {
-      setCollapsed(false); // Expand the sidebar
-      setIsPrototypeOpen(true); // Open the dropdown
-    }
+    // We removed the auto-expand functionality
+    // Now it just navigates without expanding the sidebar
   };
 
   return (
@@ -61,7 +59,11 @@ const Sidebar = () => {
           onClick={() => setCollapsed(!collapsed)}
           className="ml-auto"
         >
-          {collapsed ? <FilePlus2 size={18} /> : <FilePlus2 size={18} />}
+          <img 
+            src="/lovable-uploads/d5a5c8ee-1864-47aa-8063-24faf62e2be0.png" 
+            alt="Toggle Sidebar" 
+            className="w-5 h-5" 
+          />
         </Button>
       </div>
       
@@ -130,7 +132,7 @@ const Sidebar = () => {
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full">
-                                <MoreVertical size={14} />
+                                <MoreHorizontal size={14} />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-40">
