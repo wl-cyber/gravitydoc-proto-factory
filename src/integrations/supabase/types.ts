@@ -9,7 +9,101 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      screens: {
+        Row: {
+          created_at: string
+          documentation: string | null
+          id: string
+          image_path: string
+          implementation_plan: string | null
+          plan_status: string | null
+          project_id: string
+          screen_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          documentation?: string | null
+          id?: string
+          image_path: string
+          implementation_plan?: string | null
+          plan_status?: string | null
+          project_id: string
+          screen_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          documentation?: string | null
+          id?: string
+          image_path?: string
+          implementation_plan?: string | null
+          plan_status?: string | null
+          project_id?: string
+          screen_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "screens_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

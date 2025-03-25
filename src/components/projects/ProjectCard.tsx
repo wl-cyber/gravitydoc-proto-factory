@@ -1,8 +1,8 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical, Loader2 } from "lucide-react";
 import { 
   Card, 
   CardHeader, 
@@ -27,35 +27,68 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-type Project = {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: string;
-  updatedAt: string;
-};
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Project } from "@/types/supabase";
 
 interface ProjectCardProps {
   project: Project;
+  onUpdate: () => void;
 }
 
-const ProjectCard = ({ project }: ProjectCardProps) => {
+const ProjectCard = ({ project, onUpdate }: ProjectCardProps) => {
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [newName, setNewName] = useState(project.name);
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
-  // These are placeholder functions - will be replaced with actual implementation later
-  const handleRename = () => {
-    console.log(`Renaming project ${project.id} to ${newName}`);
-    setIsRenameDialogOpen(false);
-    // Here you would update the project name in the database
+  const handleRename = async () => {
+    if (!newName.trim() || newName === project.name) {
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      const { error } = await supabase
+        .from('projects')
+        .update({ name: newName, updated_at: new Date().toISOString() })
+        .eq('id', project.id);
+      
+      if (error) throw error;
+      
+      toast.success("Project renamed successfully");
+      setIsRenameDialogOpen(false);
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to rename project");
+      console.error("Error renaming project:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDelete = () => {
-    console.log(`Deleting project ${project.id}`);
-    setIsDeleteDialogOpen(false);
-    // Here you would delete the project from the database
+  const handleDelete = async () => {
+    try {
+      setIsLoading(true);
+      
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', project.id);
+      
+      if (error) throw error;
+      
+      toast.success("Project deleted successfully");
+      setIsDeleteDialogOpen(false);
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete project");
+      console.error("Error deleting project:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -101,8 +134,8 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
         
         <CardFooter className="text-xs text-muted-foreground pt-2">
           <div className="flex justify-between w-full">
-            <span>Created {formatDistanceToNow(new Date(project.createdAt))} ago</span>
-            <span>Updated {formatDistanceToNow(new Date(project.updatedAt))} ago</span>
+            <span>Created {formatDistanceToNow(new Date(project.created_at))} ago</span>
+            <span>Updated {formatDistanceToNow(new Date(project.updated_at))} ago</span>
           </div>
         </CardFooter>
       </Card>
@@ -123,14 +156,21 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
             className="my-4"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)} disabled={isLoading}>
               Cancel
             </Button>
             <Button 
               onClick={handleRename}
-              disabled={!newName.trim() || newName === project.name}
+              disabled={!newName.trim() || newName === project.name || isLoading}
             >
-              Save
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -146,11 +186,22 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isLoading}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
+            <Button 
+              variant="destructive" 
+              onClick={handleDelete}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

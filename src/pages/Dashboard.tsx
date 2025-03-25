@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Plus, ArrowUpDown } from "lucide-react";
+import { Search, Plus, ArrowUpDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -11,53 +11,57 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import ProjectCard from "@/components/projects/ProjectCard";
+import { supabase } from "@/integrations/supabase/client";
+import { Project } from "@/types/supabase";
+import { toast } from "sonner";
+import { useAuth } from "@/components/auth/AuthContext";
 
-// Mock project data - to be replaced with actual data later
-const mockProjects = [
-  { id: "1", name: "E-commerce App", description: "Online shopping platform", createdAt: "2023-09-15", updatedAt: "2023-10-25" },
-  { id: "2", name: "Dashboard Design", description: "Admin dashboard UI", createdAt: "2023-08-21", updatedAt: "2023-10-15" },
-  { id: "3", name: "Social Media App", description: "Connect and share with friends", createdAt: "2023-10-01", updatedAt: "2023-10-10" },
-  { id: "4", name: "Travel Planner", description: "Plan your next vacation", createdAt: "2023-09-05", updatedAt: "2023-09-20" },
-];
-
-type SortOption = "name" | "createdAt" | "updatedAt";
+type SortOption = "name" | "created_at" | "updated_at";
 
 const Dashboard = () => {
-  const [projects, setProjects] = useState(mockProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("updatedAt");
+  const [sortBy, setSortBy] = useState<SortOption>("updated_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
 
-  // Filter and sort projects whenever search query or sort options change
-  useEffect(() => {
-    let filteredProjects = [...mockProjects];
-    
-    // Filter by search query
-    if (searchQuery) {
-      filteredProjects = filteredProjects.filter(
-        project => project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  project.description.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+  // Fetch projects from Supabase
+  const fetchProjects = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (!user) return;
+      
+      let query = supabase
+        .from('projects')
+        .select('*')
+        .order(sortBy, { ascending: sortOrder === 'asc' });
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      setProjects(data || []);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load projects");
+      console.error("Error fetching projects:", error);
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Sort projects
-    filteredProjects.sort((a, b) => {
-      if (sortBy === "name") {
-        return sortOrder === "asc" 
-          ? a.name.localeCompare(b.name) 
-          : b.name.localeCompare(a.name);
-      } else {
-        // For dates
-        const dateA = new Date(a[sortBy]);
-        const dateB = new Date(b[sortBy]);
-        return sortOrder === "asc" 
-          ? dateA.getTime() - dateB.getTime() 
-          : dateB.getTime() - dateA.getTime();
-      }
-    });
-    
-    setProjects(filteredProjects);
-  }, [searchQuery, sortBy, sortOrder]);
+  };
+
+  // Fetch projects when component mounts or dependencies change
+  useEffect(() => {
+    fetchProjects();
+  }, [user, sortBy, sortOrder]);
+
+  // Filter projects by search query
+  const filteredProjects = projects.filter(
+    project => 
+      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   // Toggle sort order
   const handleSort = (option: SortOption) => {
@@ -101,10 +105,10 @@ const Dashboard = () => {
               <DropdownMenuItem onClick={() => handleSort("name")}>
                 By Name
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSort("createdAt")}>
+              <DropdownMenuItem onClick={() => handleSort("created_at")}>
                 By Date Created
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSort("updatedAt")}>
+              <DropdownMenuItem onClick={() => handleSort("updated_at")}>
                 By Date Modified
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -123,18 +127,25 @@ const Dashboard = () => {
       {/* Recent Projects Heading */}
       <h2 className="text-xl font-semibold mb-4">Recent Projects</h2>
       
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.length > 0 ? (
-          projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))
-        ) : (
-          <div className="col-span-full text-center py-12 text-muted-foreground">
-            <p>No projects found. Create a new project to get started.</p>
-          </div>
-        )}
-      </div>
+      {/* Loading State */}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+        </div>
+      ) : (
+        /* Projects Grid */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProjects.length > 0 ? (
+            filteredProjects.map((project) => (
+              <ProjectCard key={project.id} project={project} onUpdate={fetchProjects} />
+            ))
+          ) : (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              <p>No projects found. Create a new project to get started.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
