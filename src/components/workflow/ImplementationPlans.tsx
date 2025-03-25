@@ -224,6 +224,7 @@ const ImplementationPlans = ({ images, documentation, screens, onPrevious }: Imp
                   <div className="flex justify-between items-center">
                     {renderStatus(screen.plan_status as PlanStatus)}
                     
+                    {/* Here's the fixed comparison - checking if the status is not "IN_PROGRESS" */}
                     {screen.plan_status !== "IN_PROGRESS" && (
                       <Button
                         size="sm"
