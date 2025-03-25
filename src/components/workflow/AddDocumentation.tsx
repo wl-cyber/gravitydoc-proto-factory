@@ -1,12 +1,13 @@
 
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadedImage } from "./UploadScreens";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Check } from "lucide-react";
 
 interface AddDocumentationProps {
   images: UploadedImage[];
@@ -16,7 +17,6 @@ interface AddDocumentationProps {
 
 const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps) => {
   const [documentation, setDocumentation] = useState<Record<string, string>>({});
-  const [currentIndex, setCurrentIndex] = useState(0);
 
   // Initialize documentation for all images
   useEffect(() => {
@@ -46,18 +46,6 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
     onNext(images, documentation);
   };
 
-  const goToNext = () => {
-    if (currentIndex < images.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    }
-  };
-
-  const goToPrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
-    }
-  };
-
   if (images.length === 0) {
     return (
       <div className="text-center py-10">
@@ -71,82 +59,78 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="mb-4">
         <h3 className="text-lg font-medium">
-          Screen {currentIndex + 1} of {images.length}
+          Document All Screens ({images.length})
         </h3>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToPrevious}
-            disabled={currentIndex === 0}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToNext}
-            disabled={currentIndex === images.length - 1}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          Add detailed documentation for each screen to generate better implementation plans.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardContent className="p-4">
-            <img
-              src={images[currentIndex].preview}
-              alt={`Screen ${currentIndex + 1}`}
-              className="w-full h-auto max-h-[400px] object-contain"
-            />
-            <p className="text-sm text-muted-foreground mt-2">
-              {images[currentIndex].file.name}
-            </p>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor={`documentation-${images[currentIndex].id}`} className="mb-2 block">
-              Documentation <span className="text-destructive">*</span>
-            </Label>
-            <Textarea
-              id={`documentation-${images[currentIndex].id}`}
-              placeholder="Describe this screen's purpose, functionality, and any relevant details..."
-              rows={10}
-              value={documentation[images[currentIndex].id] || ''}
-              onChange={(e) => handleDocChange(images[currentIndex].id, e.target.value)}
-              className="resize-none"
-            />
-            <p className="text-sm text-muted-foreground mt-1">
-              Include component details, user interactions, and design specifications.
-            </p>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            {currentIndex < images.length - 1 ? (
-              <Button
-                onClick={goToNext}
-                className="bg-indigo-600 hover:bg-indigo-700"
-                disabled={!documentation[images[currentIndex].id]?.trim()}
-              >
-                Next Screen
-              </Button>
-            ) : (
-              <Button
-                onClick={handleNext}
-                className="bg-indigo-600 hover:bg-indigo-700"
-                disabled={!isComplete()}
-              >
-                Complete Documentation
-              </Button>
-            )}
-          </div>
-        </div>
+      <div className="space-y-6">
+        {images.map((image, index) => (
+          <Card key={image.id} className="overflow-hidden">
+            <CardContent className="p-0">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-1 border-r border-border p-4">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <div className="cursor-pointer relative group">
+                        <img
+                          src={image.preview}
+                          alt={`Screen ${index + 1}`}
+                          className="w-full h-auto max-h-[180px] object-contain"
+                        />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="text-white text-sm bg-black/50 px-2 py-1 rounded">Click to enlarge</span>
+                        </div>
+                      </div>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl">
+                      <img
+                        src={image.preview}
+                        alt={`Screen ${index + 1}`}
+                        className="w-full h-auto max-h-[80vh] object-contain"
+                      />
+                    </DialogContent>
+                  </Dialog>
+                  <p className="text-sm text-muted-foreground mt-2 truncate">
+                    {image.file.name}
+                  </p>
+                </div>
+                
+                <div className="md:col-span-2 p-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={`documentation-${image.id}`} className="text-base font-medium">
+                        Screen {index + 1}
+                      </Label>
+                      {documentation[image.id]?.trim() ? (
+                        <span className="text-green-600 flex items-center text-xs">
+                          <Check size={14} className="mr-1" /> Documented
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 text-xs">Required</span>
+                      )}
+                    </div>
+                    <Textarea
+                      id={`documentation-${image.id}`}
+                      placeholder="Describe this screen's purpose, functionality, and any relevant details..."
+                      rows={4}
+                      value={documentation[image.id] || ''}
+                      onChange={(e) => handleDocChange(image.id, e.target.value)}
+                      className="resize-none"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Include component details, user interactions, and design specifications.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <div className="flex justify-between mt-8">
