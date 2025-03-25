@@ -13,16 +13,18 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-
-type Project = {
-  id: string;
-  name: string;
-}
+import { supabase } from "@/integrations/supabase/client";
+import { Project } from "@/types/supabase";
+import { useAuth } from "@/components/auth/AuthContext";
+import { toast } from "sonner";
 
 const Sidebar = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [isPrototypeOpen, setIsPrototypeOpen] = useState(true);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const { user } = useAuth();
   
   // Close prototype dropdown when sidebar collapses
   useEffect(() => {
@@ -31,12 +33,49 @@ const Sidebar = () => {
     }
   }, [collapsed]);
   
-  // Mock data for projects - will be replaced with actual data later
-  const projects: Project[] = [
-    { id: "1", name: "E-commerce App" },
-    { id: "2", name: "Dashboard Design" },
-    { id: "3", name: "Social Media App" },
-  ];
+  // Fetch real projects from Supabase
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        if (!user) return;
+        
+        setIsLoading(true);
+        const { data, error } = await supabase
+          .from('projects')
+          .select('*')
+          .order('updated_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        setProjects(data || []);
+      } catch (error: any) {
+        console.error("Error fetching projects for sidebar:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, [user]);
+
+  // Handler for project deletion
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId);
+      
+      if (error) throw error;
+      
+      // Update local state after successful deletion
+      setProjects(projects.filter(p => p.id !== projectId));
+      toast.success("Project deleted successfully");
+    } catch (error: any) {
+      toast.error("Failed to delete project");
+      console.error("Error deleting project:", error);
+    }
+  };
 
   // Handler for quick access icon click when sidebar is collapsed
   const handleCollapsedToolClick = () => {
@@ -115,33 +154,50 @@ const Sidebar = () => {
                   
                   {/* Collapsible content with projects list */}
                   <CollapsibleContent>
-                    <div className="ml-2 space-y-1 mt-1">                
-                      {projects.map((project) => (
-                        <div key={project.id} className="flex items-center justify-between pr-2">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="w-full justify-start h-8"
-                            asChild
-                          >
-                            <Link to={`/projects/${project.id}`}>
-                              {project.name}
-                            </Link>
-                          </Button>
-                          
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full">
-                                <MoreHorizontal size={14} />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              <DropdownMenuItem>Rename</DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                    <div className="ml-2 space-y-1 mt-1">
+                      {isLoading ? (
+                        <div className="flex justify-center py-2">
+                          <span className="text-xs text-muted-foreground">Loading...</span>
                         </div>
-                      ))}
+                      ) : projects.length > 0 ? (
+                        projects.map((project) => (
+                          <div key={project.id} className="flex items-center justify-between pr-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="w-full justify-start h-8 text-left truncate"
+                              asChild
+                            >
+                              <Link to={`/projects/${project.id}`}>
+                                {project.name}
+                              </Link>
+                            </Button>
+                            
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full">
+                                  <MoreHorizontal size={14} />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem onClick={() => toast.info("Rename coming soon")}>
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => handleDeleteProject(project.id)}
+                                >
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex justify-center py-2">
+                          <span className="text-xs text-muted-foreground">No projects yet</span>
+                        </div>
+                      )}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>

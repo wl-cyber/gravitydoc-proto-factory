@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Project } from "@/types/supabase";
+import { Project, Screen } from "@/types/supabase";
+import { useScreens } from "@/hooks/useScreens";
 
 const steps = [
   { id: 1, name: "Upload Screens" },
@@ -25,6 +26,7 @@ const ProjectWorkflow = () => {
   const [documentation, setDocumentation] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const isTabletOrMobile = useMediaQuery("(max-width: 768px)");
+  const { screens, isLoadingScreens } = useScreens(projectId || "");
 
   // Fetch project details
   const { data: project, isLoading: isLoadingProject } = useQuery({
@@ -43,6 +45,29 @@ const ProjectWorkflow = () => {
     },
     enabled: !!projectId,
   });
+
+  // Automatically advance to the appropriate step based on existing screens
+  useEffect(() => {
+    if (!isLoadingScreens && screens) {
+      // If screens exist, set step 1 as completed
+      if (screens.length > 0) {
+        // Check if all screens have documentation
+        const allHaveDocumentation = screens.every(screen => !!screen.documentation);
+        
+        if (allHaveDocumentation) {
+          // If all screens have documentation, we can show step 3
+          if (currentStep === 1) {
+            setCurrentStep(3);
+          }
+        } else {
+          // If not all screens have documentation, we should show step 2
+          if (currentStep === 1) {
+            setCurrentStep(2);
+          }
+        }
+      }
+    }
+  }, [screens, isLoadingScreens, currentStep]);
 
   const handleNextFromUpload = (uploadedImages: UploadedImage[]) => {
     setImages(uploadedImages);
@@ -69,7 +94,7 @@ const ProjectWorkflow = () => {
   };
 
   const renderStepContent = () => {
-    if (isLoadingProject) {
+    if (isLoadingProject || isLoadingScreens) {
       return (
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
@@ -84,6 +109,7 @@ const ProjectWorkflow = () => {
         return (
           <AddDocumentation 
             images={images} 
+            screens={screens || []}
             onPrevious={handlePreviousFromDocs} 
             onNext={handleNextFromDocs} 
           />
@@ -93,6 +119,7 @@ const ProjectWorkflow = () => {
           <ImplementationPlans 
             images={images} 
             documentation={documentation} 
+            screens={screens || []}
             onPrevious={handlePreviousFromImplementation} 
           />
         );

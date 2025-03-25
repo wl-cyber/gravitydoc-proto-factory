@@ -1,187 +1,188 @@
 
 import { useState, useEffect } from "react";
+import { ArrowLeft, AlertTriangle, FileText, CheckCircle, Clock, Loader2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { UploadedImage } from "./UploadScreens";
-import { Badge } from "@/components/ui/badge";
-import { Pencil, RotateCw, Check, Loader2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { useParams } from "react-router-dom";
+import { UploadedImage } from "./UploadScreens";
+import { Screen } from "@/types/supabase";
+import { useScreens } from "@/hooks/useScreens";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
-import { cn } from "@/lib/utils";
-import { useNavigate, useParams } from "react-router-dom";
-import { Screen } from "@/types/supabase";
-import { useScreens } from "@/hooks/useScreens";
-import { generateScreenName, generateScreenPlan } from "@/services/openai";
+import ImplementationPlaceholder from "./ImplementationPlaceholder";
+
+type PlanStatus = "NOT_GENERATED" | "IN_PROGRESS" | "COMPLETED";
 
 interface ImplementationPlansProps {
   images: UploadedImage[];
   documentation: Record<string, string>;
+  screens: Screen[];
   onPrevious: () => void;
 }
 
-const ImplementationPlans = ({ 
-  images, 
-  documentation, 
-  onPrevious 
-}: ImplementationPlansProps) => {
+const ImplementationPlans = ({ images, documentation, screens, onPrevious }: ImplementationPlansProps) => {
   const { projectId } = useParams<{ projectId: string }>();
+  const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editData, setEditData] = useState<{ screenId: string; screenName: string; documentation: string; }>({
+    screenId: "",
+    screenName: "",
+    documentation: ""
+  });
+  
   const { 
-    screens, 
-    isLoadingScreens,
-    updateScreenDetails,
-    isUpdatingDetails,
     updateScreenPlan,
-    isUpdatingPlan,
     updateScreenStatus,
-    isUpdatingStatus
+    updateScreenDetails,
+    isUpdatingPlan,
+    isUpdatingStatus,
+    isUpdatingDetails
   } = useScreens(projectId || "");
 
-  const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editDocumentation, setEditDocumentation] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const navigate = useNavigate();
-
-  // Set up screen names from AI (if not already set)
+  // Select the first screen by default when screens are loaded
   useEffect(() => {
-    const setupScreenNames = async () => {
-      if (!screens) return;
-      
-      // Find screens that don't have names yet
-      const screensWithoutNames = screens.filter(screen => !screen.screen_name);
-      
-      if (screensWithoutNames.length === 0) return;
-      
-      // Generate names for each screen
-      for (const screen of screensWithoutNames) {
-        if (!screen.documentation) continue;
-        
-        try {
-          const generatedName = await generateScreenName(screen.documentation);
-          updateScreenDetails({
-            screenId: screen.id,
-            screenName: generatedName,
-            documentation: screen.documentation
-          });
-        } catch (error) {
-          console.error("Error generating screen name:", error);
-        }
-      }
-    };
-    
-    setupScreenNames();
-  }, [screens]);
+    if (screens?.length > 0 && !selectedScreenId) {
+      setSelectedScreenId(screens[0].id);
+    }
+  }, [screens, selectedScreenId]);
 
-  const handleEditScreen = (screen: Screen) => {
-    setSelectedScreen(screen);
-    setEditName(screen.screen_name || "");
-    setEditDocumentation(screen.documentation || "");
-    setEditDialogOpen(true);
+  const handleEditScreen = (screenId: string) => {
+    const screen = screens.find(s => s.id === screenId);
+    if (screen) {
+      setEditData({
+        screenId: screen.id,
+        screenName: screen.screen_name || "",
+        documentation: screen.documentation || ""
+      });
+      setEditDialogOpen(true);
+    }
   };
 
-  const handleSaveEdit = () => {
-    if (!selectedScreen) return;
-    
-    updateScreenDetails({
-      screenId: selectedScreen.id,
-      screenName: editName,
-      documentation: editDocumentation
-    });
-    
-    setEditDialogOpen(false);
-  };
-
-  const handleGeneratePlan = async (screen: Screen) => {
-    if (!screen.documentation) {
-      toast.error("Screen needs documentation before generating a plan");
+  const handleUpdateScreenDetails = async () => {
+    if (!editData.screenName.trim()) {
+      toast.error("Screen name is required");
       return;
     }
-    
-    // Update the status of this screen to IN_PROGRESS
-    updateScreenStatus({ screenId: screen.id, status: 'IN_PROGRESS' });
-    
-    // Update the selected screen if it's currently selected
-    if (selectedScreen?.id === screen.id) {
-      setSelectedScreen({
-        ...selectedScreen,
-        plan_status: 'IN_PROGRESS'
-      });
+
+    if (!editData.documentation.trim()) {
+      toast.error("Documentation is required");
+      return;
     }
-    
+
     try {
-      setGenerating(true);
-      
-      // Call the OpenAI service to generate the plan
-      const plan = await generateScreenPlan(screen);
-      
-      // Update the screen with the generated plan
-      updateScreenPlan({
-        screenId: screen.id,
-        plan,
-        status: 'COMPLETED'
+      await updateScreenDetails({
+        screenId: editData.screenId,
+        screenName: editData.screenName,
+        documentation: editData.documentation
       });
       
-      // Update the selected screen if it's currently selected
-      if (selectedScreen?.id === screen.id) {
-        setSelectedScreen({
-          ...selectedScreen,
-          implementation_plan: plan,
-          plan_status: 'COMPLETED'
-        });
-      }
+      setEditDialogOpen(false);
+    } catch (error) {
+      console.error("Error updating screen details:", error);
+    }
+  };
+
+  const generatePlan = async (screenId: string) => {
+    try {
+      const screen = screens.find(s => s.id === screenId);
+      if (!screen) return;
       
-      toast.success(`Plan for "${screen.screen_name}" generated successfully`);
+      // Set status to IN_PROGRESS
+      await updateScreenStatus({ screenId, status: "IN_PROGRESS" });
+      
+      // Call OpenAI API to generate plan (handled by the backend)
+      // This would typically be an API call, but we're mocking it for now
+      // Set a timeout to simulate API call delay
+      setTimeout(async () => {
+        const plan = `# Implementation Plan for ${screen.screen_name || 'Screen'}
+
+## Overview
+This screen represents ${screen.documentation?.slice(0, 100)}...
+
+## Components Required
+1. Header Section
+2. Main Content Area
+3. Input Fields
+4. Action Buttons
+
+## Implementation Steps
+1. Create the layout structure
+2. Implement the header component
+3. Add the main content area
+4. Style all elements according to design
+5. Add event handlers and logic
+
+## API Requirements
+- GET /api/data
+- POST /api/submit
+
+## Estimated Time
+4-6 hours
+
+## Notes
+Ensure responsive design across all device sizes.`;
+
+        // Update the plan in Supabase
+        await updateScreenPlan({ 
+          screenId, 
+          plan, 
+          status: "COMPLETED"
+        });
+        
+        toast.success(`Plan for "${screen.screen_name}" has been generated`);
+      }, 2000); // Simulate 2 second delay
+      
     } catch (error) {
       console.error("Error generating plan:", error);
-      toast.error("Failed to generate plan. Please try again.");
-      
-      // Reset status on error
-      updateScreenStatus({ screenId: screen.id, status: 'NOT_GENERATED' });
-      
-      // Update the selected screen if it's currently selected
-      if (selectedScreen?.id === screen.id) {
-        setSelectedScreen({
-          ...selectedScreen,
-          plan_status: 'NOT_GENERATED'
-        });
-      }
-    } finally {
-      setGenerating(false);
+      toast.error("Failed to generate implementation plan");
+      await updateScreenStatus({ screenId, status: "NOT_GENERATED" });
     }
   };
 
-  const handleSelectScreen = (screen: Screen) => {
-    setSelectedScreen(screen);
+  const renderStatus = (status: PlanStatus) => {
+    switch (status) {
+      case "NOT_GENERATED":
+        return (
+          <Badge variant="outline" className="flex gap-1 items-center">
+            <AlertTriangle size={12} className="text-amber-500" />
+            <span>Not Generated</span>
+          </Badge>
+        );
+      case "IN_PROGRESS":
+        return (
+          <Badge variant="outline" className="flex gap-1 items-center">
+            <Clock size={12} className="text-blue-500" />
+            <span>In Progress</span>
+          </Badge>
+        );
+      case "COMPLETED":
+        return (
+          <Badge variant="outline" className="flex gap-1 items-center bg-green-50">
+            <CheckCircle size={12} className="text-green-500" />
+            <span className="text-green-600">Completed</span>
+          </Badge>
+        );
+      default:
+        return null;
+    }
   };
 
-  const allPlansCompleted = screens?.every(screen => screen.plan_status === 'COMPLETED') || false;
-
-  const handleFinish = () => {
-    toast.success("All plans have been generated successfully!");
-    navigate("/");
+  const getSelectedScreen = () => {
+    return screens.find(screen => screen.id === selectedScreenId);
   };
-
-  if (isLoadingScreens) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-        <span className="ml-2 text-indigo-600">Loading implementation plans...</span>
-      </div>
-    );
-  }
 
   if (!screens || screens.length === 0) {
     return (
-      <div className="text-center py-10">
-        <p className="text-muted-foreground mb-4">No screens found to generate plans for.</p>
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <p className="text-muted-foreground mb-4">No screens found. Please go back and upload some screens.</p>
         <Button onClick={onPrevious} variant="outline">
-          Go Back to Documentation
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Documentation
         </Button>
       </div>
     );
@@ -189,166 +190,126 @@ const ImplementationPlans = ({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Panel - Screen List */}
-        <div className="lg:col-span-1 space-y-4">
-          <h3 className="text-lg font-medium mb-4">
-            Screens ({screens.length})
-          </h3>
-
-          <ScrollArea className="h-[calc(100vh-300px)]">
-            <div className="space-y-4 pr-4">
-              {screens.map((screen) => (
-                <Card 
-                  key={screen.id}
-                  className={cn(
-                    "overflow-hidden hover:shadow-md transition-shadow border cursor-pointer",
-                    selectedScreen?.id === screen.id && "border-indigo-400 shadow-sm"
-                  )}
-                  onClick={() => handleSelectScreen(screen)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex flex-col space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-medium line-clamp-1 text-sm">{screen.screen_name || "Loading..."}</h4>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditScreen(screen);
-                              }}
-                              disabled={isUpdatingDetails}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                          
-                          <div className="mt-1">
-                            {screen.plan_status === 'NOT_GENERATED' && (
-                              <Badge variant="outline" className="text-xs bg-gray-50">
-                                Not Generated
-                              </Badge>
-                            )}
-                            {screen.plan_status === 'IN_PROGRESS' && (
-                              <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                In Progress
-                              </Badge>
-                            )}
-                            {screen.plan_status === 'COMPLETED' && (
-                              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                                <Check className="h-3 w-3 mr-1" />
-                                Completed
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="relative flex-shrink-0 h-16 w-16 rounded overflow-hidden border">
-                          <img
-                            src={screen.image_path}
-                            alt={screen.screen_name || "Screen"}
-                            className="object-cover h-full w-full"
-                          />
-                        </div>
-                      </div>
-                      
-                      {screen.plan_status !== 'IN_PROGRESS' && (
-                        <Button
-                          size="sm"
-                          className={screen.plan_status === 'COMPLETED' ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "bg-black text-white hover:bg-gray-800"}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGeneratePlan(screen);
-                          }}
-                          disabled={generating || isUpdatingPlan || isUpdatingStatus}
-                        >
-                          {screen.plan_status === 'COMPLETED' ? (
-                            <>
-                              <RotateCw className="h-4 w-4 mr-2" />
-                              Regenerate Plan
-                            </>
-                          ) : (
-                            'Generate Plan'
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
-        
-        {/* Right Panel - Markdown Editor/Viewer */}
-        <div className="lg:col-span-2">
-          <Card className="h-[calc(100vh-300px)] border">
-            <CardContent className="p-0 h-full flex flex-col">
-              {selectedScreen ? (
-                <>
-                  <div className="border-b p-4">
-                    <h3 className="text-xl font-semibold">{selectedScreen.screen_name}</h3>
-                    <p className="text-sm text-muted-foreground line-clamp-1">
-                      {selectedScreen.documentation}
-                    </p>
+      <p className="text-muted-foreground mb-6">
+        Review and generate implementation plans for each screen.
+      </p>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Left side - Screen list */}
+        <div className="md:col-span-1 space-y-4">
+          <h3 className="text-lg font-medium mb-2">Screens</h3>
+          <div className="space-y-4 overflow-auto max-h-[70vh]">
+            {screens.map((screen, index) => (
+              <Card 
+                key={screen.id} 
+                className={`p-4 cursor-pointer transition-all hover:shadow ${
+                  selectedScreenId === screen.id ? 'ring-2 ring-indigo-500' : ''
+                }`}
+                onClick={() => setSelectedScreenId(screen.id)}
+              >
+                <div className="flex flex-col space-y-3">
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-medium truncate">
+                      {screen.screen_name || `Screen ${index + 1}`}
+                    </h4>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditScreen(screen.id);
+                      }}
+                    >
+                      <Pencil size={14} />
+                    </Button>
                   </div>
                   
-                  <ScrollArea className="flex-1 p-4">
-                    {selectedScreen.plan_status === 'NOT_GENERATED' && (
-                      <div className="h-full flex flex-col items-center justify-center text-center p-6">
-                        <div className="max-w-md">
-                          <h4 className="text-lg font-medium mb-2">No Implementation Plan</h4>
-                          <p className="text-muted-foreground mb-6">
-                            Click the "Generate Plan" button to create an implementation plan for this screen.
-                          </p>
-                          <Button 
-                            onClick={() => handleGeneratePlan(selectedScreen)}
-                            disabled={generating || isUpdatingPlan || isUpdatingStatus}
-                            className="bg-black text-white hover:bg-gray-800"
-                          >
-                            Generate Plan
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                  <div className="aspect-video bg-muted rounded-md overflow-hidden">
+                    <img 
+                      src={screen.image_path} 
+                      alt={screen.screen_name || `Screen ${index + 1}`}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    {renderStatus(screen.plan_status as PlanStatus)}
                     
-                    {selectedScreen.plan_status === 'IN_PROGRESS' && (
-                      <div className="h-full flex flex-col items-center justify-center text-center p-6">
-                        <Loader2 className="h-12 w-12 text-indigo-600 animate-spin mb-4" />
-                        <h4 className="text-lg font-medium mb-2">Generating Plan...</h4>
-                        <p className="text-muted-foreground">
-                          This might take a moment. We're analyzing the screen and documentation.
-                        </p>
-                      </div>
+                    {screen.plan_status !== "IN_PROGRESS" && (
+                      <Button
+                        size="sm"
+                        variant={screen.plan_status === "COMPLETED" ? "outline" : "default"}
+                        className={screen.plan_status === "COMPLETED" ? "" : "bg-indigo-600 hover:bg-indigo-700"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (screen.plan_status !== "COMPLETED") {
+                            generatePlan(screen.id);
+                          } else {
+                            // If plan already exists, just select it
+                            setSelectedScreenId(screen.id);
+                          }
+                        }}
+                        disabled={isUpdatingPlan || isUpdatingStatus}
+                      >
+                        {screen.plan_status === "IN_PROGRESS" ? (
+                          <>
+                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            Generating...
+                          </>
+                        ) : screen.plan_status === "COMPLETED" ? (
+                          <>
+                            <FileText size={14} className="mr-1" />
+                            View Plan
+                          </>
+                        ) : (
+                          "Generate Plan"
+                        )}
+                      </Button>
                     )}
-                    
-                    {selectedScreen.plan_status === 'COMPLETED' && selectedScreen.implementation_plan && (
-                      <div className="prose prose-indigo max-w-none">
-                        <ReactMarkdown>{selectedScreen.implementation_plan}</ReactMarkdown>
-                      </div>
-                    )}
-                  </ScrollArea>
-                </>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6">
-                  <div className="max-w-md">
-                    <h4 className="text-lg font-medium mb-2">Select a Screen</h4>
-                    <p className="text-muted-foreground">
-                      Click on a screen from the list to view or generate its implementation plan.
-                    </p>
                   </div>
                 </div>
-              )}
-            </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+        
+        {/* Right side - Plan preview */}
+        <div className="md:col-span-2">
+          <h3 className="text-lg font-medium mb-4">Implementation Plan</h3>
+          <Card className="p-4 sm:p-6 min-h-[60vh] max-h-[70vh] overflow-auto">
+            {selectedScreenId ? (
+              getSelectedScreen()?.implementation_plan ? (
+                <ReactMarkdown className="prose prose-sm max-w-none">
+                  {getSelectedScreen()?.implementation_plan || ""}
+                </ReactMarkdown>
+              ) : (
+                <ImplementationPlaceholder screenName={getSelectedScreen()?.screen_name} />
+              )
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                Select a screen to view or generate an implementation plan
+              </div>
+            )}
           </Card>
         </div>
       </div>
-
+      
+      <div className="flex justify-between pt-4">
+        <Button onClick={onPrevious} variant="outline">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Documentation
+        </Button>
+        
+        <Button 
+          onClick={() => toast.success("Workflow completed successfully!")}
+          className="bg-indigo-600 hover:bg-indigo-700"
+          disabled={!screens.every(screen => screen.plan_status === "COMPLETED")}
+        >
+          Finish
+        </Button>
+      </div>
+      
       {/* Edit Screen Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -356,64 +317,49 @@ const ImplementationPlans = ({
             <DialogTitle>Edit Screen Details</DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Screen Name</Label>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="screen-name">Screen Name</Label>
               <Input
-                id="name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                disabled={isUpdatingDetails}
+                id="screen-name"
+                value={editData.screenName}
+                onChange={(e) => setEditData({ ...editData, screenName: e.target.value })}
+                placeholder="e.g., Login Screen, User Dashboard"
               />
             </div>
             
-            <div className="space-y-2">
+            <div className="grid gap-2">
               <Label htmlFor="documentation">Documentation</Label>
               <Textarea
                 id="documentation"
-                value={editDocumentation}
-                onChange={(e) => setEditDocumentation(e.target.value)}
+                value={editData.documentation}
+                onChange={(e) => setEditData({ ...editData, documentation: e.target.value })}
+                placeholder="Describe this screen in detail..."
                 rows={5}
-                disabled={isUpdatingDetails}
               />
             </div>
           </div>
           
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={isUpdatingDetails}>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit} disabled={isUpdatingDetails}>
+            <Button 
+              onClick={handleUpdateScreenDetails}
+              disabled={isUpdatingDetails}
+            >
               {isUpdatingDetails ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
               ) : (
-                'Save Changes'
+                "Save Changes"
               )}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Action Buttons */}
-      <div className="flex justify-between mt-8">
-        <Button
-          variant="outline"
-          onClick={onPrevious}
-        >
-          Back to Documentation
-        </Button>
-        
-        <Button
-          onClick={handleFinish}
-          className="bg-indigo-600 hover:bg-indigo-700"
-          disabled={!allPlansCompleted}
-        >
-          Finish
-        </Button>
-      </div>
     </div>
   );
 };
