@@ -33,28 +33,34 @@ export const useScreens = (projectId: string) => {
     const fileName = `${nanoid()}.${fileExt}`;
     const filePath = `${projectId}/${fileName}`;
     
-    const { error } = await supabase.storage
+    // Create a progress handler
+    const handleProgress = (progress: { loaded: number; total: number }) => {
+      setUploadProgress(prev => ({
+        ...prev,
+        [fileName]: Math.round((progress.loaded / progress.total) * 100)
+      }));
+    };
+    
+    // Use the upload method without the invalid onUploadProgress option
+    const { error, data } = await supabase.storage
       .from('screen_images')
       .upload(filePath, image, {
         cacheControl: '3600',
-        upsert: false,
-        onUploadProgress: (progress) => {
-          setUploadProgress(prev => ({
-            ...prev,
-            [fileName]: Math.round((progress.loaded / progress.total) * 100)
-          }));
-        }
+        upsert: false
       });
     
     if (error) {
       throw error;
     }
 
-    const { data } = supabase.storage
+    // Since we can't use the built-in progress tracking, we'll simulate completion
+    handleProgress({ loaded: 1, total: 1 });
+
+    const { data: publicUrlData } = supabase.storage
       .from('screen_images')
       .getPublicUrl(filePath);
 
-    return data.publicUrl;
+    return publicUrlData.publicUrl;
   };
 
   // Create screens in Supabase
@@ -62,7 +68,20 @@ export const useScreens = (projectId: string) => {
     mutationFn: async (images: UploadedImage[]) => {
       const uploadPromises = images.map(async (image) => {
         try {
+          // Set initial progress
+          setUploadProgress(prev => ({
+            ...prev,
+            [image.id]: 0
+          }));
+          
           const imagePath = await uploadImage(image.file);
+          
+          // Set complete progress
+          setUploadProgress(prev => ({
+            ...prev,
+            [image.id]: 100
+          }));
+          
           const { data, error } = await supabase
             .from('screens')
             .insert({
