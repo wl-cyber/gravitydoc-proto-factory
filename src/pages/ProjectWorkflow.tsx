@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import UploadScreens, { UploadedImage } from "@/components/workflow/UploadScreens";
 import AddDocumentation from "@/components/workflow/AddDocumentation";
-import ImplementationPlaceholder from "@/components/workflow/ImplementationPlaceholder";
+import ImplementationPlans from "@/components/workflow/ImplementationPlans";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 
@@ -80,7 +80,7 @@ const ProjectWorkflow = () => {
         );
       case 3:
         return (
-          <ImplementationPlaceholder 
+          <ImplementationPlans 
             images={images} 
             documentation={documentation} 
             onPrevious={handlePreviousFromImplementation} 
