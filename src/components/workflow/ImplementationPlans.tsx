@@ -13,8 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Screen } from "@/types/supabase";
+import { useScreens } from "@/hooks/useScreens";
+import { generateScreenName, generateScreenPlan } from "@/services/openai";
 
 interface ImplementationPlansProps {
   images: UploadedImage[];
@@ -22,184 +24,168 @@ interface ImplementationPlansProps {
   onPrevious: () => void;
 }
 
-type PlanStatus = 'NOT_GENERATED' | 'IN_PROGRESS' | 'COMPLETED';
-
-interface ScreenPlan {
-  id: string;
-  name: string | null;
-  documentation: string;
-  status: PlanStatus;
-  plan: string | null;
-}
-
 const ImplementationPlans = ({ 
   images, 
   documentation, 
   onPrevious 
 }: ImplementationPlansProps) => {
-  const [screens, setScreens] = useState<ScreenPlan[]>([]);
-  const [selectedScreen, setSelectedScreen] = useState<ScreenPlan | null>(null);
+  const { projectId } = useParams<{ projectId: string }>();
+  const { 
+    screens, 
+    isLoadingScreens,
+    updateScreenDetails,
+    isUpdatingDetails,
+    updateScreenPlan,
+    isUpdatingPlan,
+    updateScreenStatus,
+    isUpdatingStatus
+  } = useScreens(projectId || "");
+
+  const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDocumentation, setEditDocumentation] = useState("");
   const [generating, setGenerating] = useState(false);
   const navigate = useNavigate();
 
-  // Initialize screens with AI-generated names (simulated)
+  // Set up screen names from AI (if not already set)
   useEffect(() => {
-    const initialScreens: ScreenPlan[] = images.map((img) => {
-      const doc = documentation[img.id] || "";
-      // Extract a screen name from the documentation - simple heuristic
-      const docLines = doc.split('\n');
-      const firstLine = docLines[0].trim();
-      let generatedName = firstLine.length > 30 
-        ? firstLine.substring(0, 30) + "..." 
-        : firstLine;
+    const setupScreenNames = async () => {
+      if (!screens) return;
       
-      // If first line is too short, use a generic name
-      if (generatedName.length < 3) {
-        generatedName = `Screen ${img.file.name.split('.')[0]}`;
+      // Find screens that don't have names yet
+      const screensWithoutNames = screens.filter(screen => !screen.screen_name);
+      
+      if (screensWithoutNames.length === 0) return;
+      
+      // Generate names for each screen
+      for (const screen of screensWithoutNames) {
+        if (!screen.documentation) continue;
+        
+        try {
+          const generatedName = await generateScreenName(screen.documentation);
+          updateScreenDetails({
+            screenId: screen.id,
+            screenName: generatedName,
+            documentation: screen.documentation
+          });
+        } catch (error) {
+          console.error("Error generating screen name:", error);
+        }
       }
-
-      return {
-        id: img.id,
-        name: generatedName,
-        documentation: doc,
-        status: 'NOT_GENERATED' as PlanStatus,
-        plan: null
-      };
-    });
+    };
     
-    setScreens(initialScreens);
-  }, [images, documentation]);
+    setupScreenNames();
+  }, [screens]);
 
-  const handleEditScreen = (screen: ScreenPlan) => {
+  const handleEditScreen = (screen: Screen) => {
     setSelectedScreen(screen);
-    setEditName(screen.name || "");
-    setEditDocumentation(screen.documentation);
+    setEditName(screen.screen_name || "");
+    setEditDocumentation(screen.documentation || "");
     setEditDialogOpen(true);
   };
 
   const handleSaveEdit = () => {
     if (!selectedScreen) return;
     
-    setScreens(prev => prev.map(s => 
-      s.id === selectedScreen.id 
-        ? { ...s, name: editName, documentation: editDocumentation } 
-        : s
-    ));
+    updateScreenDetails({
+      screenId: selectedScreen.id,
+      screenName: editName,
+      documentation: editDocumentation
+    });
     
     setEditDialogOpen(false);
-    toast.success("Screen details updated successfully");
   };
 
-  const generateMarkdownPlan = async (screen: ScreenPlan) => {
-    // Update the status of this screen
-    setScreens(prev => prev.map(s => 
-      s.id === screen.id ? { ...s, status: 'IN_PROGRESS' } : s
-    ));
+  const handleGeneratePlan = async (screen: Screen) => {
+    if (!screen.documentation) {
+      toast.error("Screen needs documentation before generating a plan");
+      return;
+    }
     
-    setSelectedScreen(prev => prev?.id === screen.id ? { ...prev, status: 'IN_PROGRESS' } : prev);
+    // Update the status of this screen to IN_PROGRESS
+    updateScreenStatus({ screenId: screen.id, status: 'IN_PROGRESS' });
     
-    // This would be where you call the OpenAI API in a real implementation
-    // For now, we'll simulate generating content with a delay
+    // Update the selected screen if it's currently selected
+    if (selectedScreen?.id === screen.id) {
+      setSelectedScreen({
+        ...selectedScreen,
+        plan_status: 'IN_PROGRESS'
+      });
+    }
+    
     try {
       setGenerating(true);
       
-      // Simulate API call with a timeout
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the OpenAI service to generate the plan
+      const plan = await generateScreenPlan(screen);
       
-      // Generate a plan based on the documentation
-      const fakePlan = `# ${screen.name} Implementation Plan
-
-## 1. Overview
-This screen represents ${screen.documentation.substring(0, 50)}...
-
-## 2. Component Breakdown
-- Header Section
-- Main Content Area
-- Navigation Elements
-- User Interaction Points
-
-## 3. UI Components Needed
-- Container Layout
-- Typography Elements
-- Button Components
-- Input Fields
-- Card Elements
-
-## 4. Implementation Steps
-1. Create the base component structure
-2. Implement the layout grid
-3. Add typography and static elements
-4. Implement interactive elements
-5. Connect data sources
-6. Add state management
-7. Implement event handlers
-8. Add animations and transitions
-9. Ensure responsive behavior
-
-## 5. Technical Considerations
-- Use Flexbox/Grid for responsive layout
-- Implement proper accessibility features
-- Ensure mobile responsiveness
-- Optimize for performance
-
-## 6. Estimated Development Time
-- Frontend Implementation: 4-6 hours
-- Integration with Backend: 2-3 hours
-- Testing and Refinement: 2-3 hours
-
-## 7. Dependencies
-- React component library
-- State management solution
-- API integration for data
-
-## 8. Success Criteria
-- Screen matches design specifications
-- All interactive elements function correctly
-- Screen is fully responsive
-- Passes accessibility requirements
-`;
-
       // Update the screen with the generated plan
-      setScreens(prev => prev.map(s => 
-        s.id === screen.id 
-          ? { ...s, status: 'COMPLETED', plan: fakePlan } 
-          : s
-      ));
+      updateScreenPlan({
+        screenId: screen.id,
+        plan,
+        status: 'COMPLETED'
+      });
       
-      // If this was the selected screen, update it
-      setSelectedScreen(prev => 
-        prev?.id === screen.id 
-          ? { ...prev, status: 'COMPLETED', plan: fakePlan } 
-          : prev
-      );
+      // Update the selected screen if it's currently selected
+      if (selectedScreen?.id === screen.id) {
+        setSelectedScreen({
+          ...selectedScreen,
+          implementation_plan: plan,
+          plan_status: 'COMPLETED'
+        });
+      }
       
-      toast.success(`Plan for "${screen.name}" generated successfully`);
+      toast.success(`Plan for "${screen.screen_name}" generated successfully`);
     } catch (error) {
       console.error("Error generating plan:", error);
       toast.error("Failed to generate plan. Please try again.");
       
       // Reset status on error
-      setScreens(prev => prev.map(s => 
-        s.id === screen.id ? { ...s, status: 'NOT_GENERATED' } : s
-      ));
+      updateScreenStatus({ screenId: screen.id, status: 'NOT_GENERATED' });
+      
+      // Update the selected screen if it's currently selected
+      if (selectedScreen?.id === screen.id) {
+        setSelectedScreen({
+          ...selectedScreen,
+          plan_status: 'NOT_GENERATED'
+        });
+      }
     } finally {
       setGenerating(false);
     }
   };
 
-  const handleSelectScreen = (screen: ScreenPlan) => {
+  const handleSelectScreen = (screen: Screen) => {
     setSelectedScreen(screen);
   };
 
-  const allPlansCompleted = screens.every(screen => screen.status === 'COMPLETED');
+  const allPlansCompleted = screens?.every(screen => screen.plan_status === 'COMPLETED') || false;
 
   const handleFinish = () => {
     toast.success("All plans have been generated successfully!");
     navigate("/");
   };
+
+  if (isLoadingScreens) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+        <span className="ml-2 text-indigo-600">Loading implementation plans...</span>
+      </div>
+    );
+  }
+
+  if (!screens || screens.length === 0) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-muted-foreground mb-4">No screens found to generate plans for.</p>
+        <Button onClick={onPrevious} variant="outline">
+          Go Back to Documentation
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -226,7 +212,7 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <h4 className="font-medium line-clamp-1 text-sm">{screen.name}</h4>
+                            <h4 className="font-medium line-clamp-1 text-sm">{screen.screen_name || "Loading..."}</h4>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -235,24 +221,25 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                                 e.stopPropagation();
                                 handleEditScreen(screen);
                               }}
+                              disabled={isUpdatingDetails}
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                           
                           <div className="mt-1">
-                            {screen.status === 'NOT_GENERATED' && (
+                            {screen.plan_status === 'NOT_GENERATED' && (
                               <Badge variant="outline" className="text-xs bg-gray-50">
                                 Not Generated
                               </Badge>
                             )}
-                            {screen.status === 'IN_PROGRESS' && (
+                            {screen.plan_status === 'IN_PROGRESS' && (
                               <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
                                 <Loader2 className="h-3 w-3 animate-spin mr-1" />
                                 In Progress
                               </Badge>
                             )}
-                            {screen.status === 'COMPLETED' && (
+                            {screen.plan_status === 'COMPLETED' && (
                               <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
                                 <Check className="h-3 w-3 mr-1" />
                                 Completed
@@ -263,30 +250,24 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                         
                         <div className="relative flex-shrink-0 h-16 w-16 rounded overflow-hidden border">
                           <img
-                            src={images.find(img => img.id === screen.id)?.preview}
-                            alt={screen.name || "Screen"}
+                            src={screen.image_path}
+                            alt={screen.screen_name || "Screen"}
                             className="object-cover h-full w-full"
                           />
                         </div>
                       </div>
                       
-                      {screen.status !== 'IN_PROGRESS' && (
+                      {screen.plan_status !== 'IN_PROGRESS' && (
                         <Button
                           size="sm"
-                          className={screen.status === 'COMPLETED' ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "bg-black text-white hover:bg-gray-800"}
+                          className={screen.plan_status === 'COMPLETED' ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "bg-black text-white hover:bg-gray-800"}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (screen.status === 'COMPLETED') {
-                              // Regenerate plan if already completed
-                              generateMarkdownPlan(screen);
-                            } else {
-                              // Generate new plan
-                              generateMarkdownPlan(screen);
-                            }
+                            handleGeneratePlan(screen);
                           }}
-                          disabled={generating}
+                          disabled={generating || isUpdatingPlan || isUpdatingStatus}
                         >
-                          {screen.status === 'COMPLETED' ? (
+                          {screen.plan_status === 'COMPLETED' ? (
                             <>
                               <RotateCw className="h-4 w-4 mr-2" />
                               Regenerate Plan
@@ -311,14 +292,14 @@ This screen represents ${screen.documentation.substring(0, 50)}...
               {selectedScreen ? (
                 <>
                   <div className="border-b p-4">
-                    <h3 className="text-xl font-semibold">{selectedScreen.name}</h3>
+                    <h3 className="text-xl font-semibold">{selectedScreen.screen_name}</h3>
                     <p className="text-sm text-muted-foreground line-clamp-1">
                       {selectedScreen.documentation}
                     </p>
                   </div>
                   
                   <ScrollArea className="flex-1 p-4">
-                    {selectedScreen.status === 'NOT_GENERATED' && (
+                    {selectedScreen.plan_status === 'NOT_GENERATED' && (
                       <div className="h-full flex flex-col items-center justify-center text-center p-6">
                         <div className="max-w-md">
                           <h4 className="text-lg font-medium mb-2">No Implementation Plan</h4>
@@ -326,8 +307,8 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                             Click the "Generate Plan" button to create an implementation plan for this screen.
                           </p>
                           <Button 
-                            onClick={() => generateMarkdownPlan(selectedScreen)}
-                            disabled={generating}
+                            onClick={() => handleGeneratePlan(selectedScreen)}
+                            disabled={generating || isUpdatingPlan || isUpdatingStatus}
                             className="bg-black text-white hover:bg-gray-800"
                           >
                             Generate Plan
@@ -336,7 +317,7 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                       </div>
                     )}
                     
-                    {selectedScreen.status === 'IN_PROGRESS' && (
+                    {selectedScreen.plan_status === 'IN_PROGRESS' && (
                       <div className="h-full flex flex-col items-center justify-center text-center p-6">
                         <Loader2 className="h-12 w-12 text-indigo-600 animate-spin mb-4" />
                         <h4 className="text-lg font-medium mb-2">Generating Plan...</h4>
@@ -346,9 +327,9 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                       </div>
                     )}
                     
-                    {selectedScreen.status === 'COMPLETED' && selectedScreen.plan && (
+                    {selectedScreen.plan_status === 'COMPLETED' && selectedScreen.implementation_plan && (
                       <div className="prose prose-indigo max-w-none">
-                        <ReactMarkdown>{selectedScreen.plan}</ReactMarkdown>
+                        <ReactMarkdown>{selectedScreen.implementation_plan}</ReactMarkdown>
                       </div>
                     )}
                   </ScrollArea>
@@ -382,6 +363,7 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                 id="name"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
+                disabled={isUpdatingDetails}
               />
             </div>
             
@@ -392,16 +374,24 @@ This screen represents ${screen.documentation.substring(0, 50)}...
                 value={editDocumentation}
                 onChange={(e) => setEditDocumentation(e.target.value)}
                 rows={5}
+                disabled={isUpdatingDetails}
               />
             </div>
           </div>
           
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={isUpdatingDetails}>
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit}>
-              Save Changes
+            <Button onClick={handleSaveEdit} disabled={isUpdatingDetails}>
+              {isUpdatingDetails ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
             </Button>
           </div>
         </DialogContent>

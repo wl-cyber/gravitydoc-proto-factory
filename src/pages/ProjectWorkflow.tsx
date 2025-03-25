@@ -3,12 +3,14 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import UploadScreens, { UploadedImage } from "@/components/workflow/UploadScreens";
 import AddDocumentation from "@/components/workflow/AddDocumentation";
 import ImplementationPlans from "@/components/workflow/ImplementationPlans";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { Project } from "@/types/supabase";
 
 const steps = [
   { id: 1, name: "Upload Screens" },
@@ -21,18 +23,26 @@ const ProjectWorkflow = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [documentation, setDocumentation] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const isTabletOrMobile = useMediaQuery("(max-width: 768px)");
 
-  // Simulate loading project data
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 800);
-    
-    return () => clearTimeout(timer);
-  }, [projectId]);
+  // Fetch project details
+  const { data: project, isLoading: isLoadingProject } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      if (!projectId) throw new Error("Project ID is missing");
+      
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+      
+      if (error) throw error;
+      return data as Project;
+    },
+    enabled: !!projectId,
+  });
 
   const handleNextFromUpload = (uploadedImages: UploadedImage[]) => {
     setImages(uploadedImages);
@@ -59,7 +69,7 @@ const ProjectWorkflow = () => {
   };
 
   const renderStepContent = () => {
-    if (loading) {
+    if (isLoadingProject) {
       return (
         <div className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
@@ -101,7 +111,9 @@ const ProjectWorkflow = () => {
           </Link>
         </Button>
         
-        <h1 className="text-xl sm:text-2xl font-bold text-indigo-700">Project Workflow</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-indigo-700">
+          {project?.name ? `${project.name} - Workflow` : "Project Workflow"}
+        </h1>
       </div>
       
       {/* Horizontal Stepper */}

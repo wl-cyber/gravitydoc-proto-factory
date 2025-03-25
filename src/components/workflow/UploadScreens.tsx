@@ -1,9 +1,12 @@
-
 import { useState, useCallback } from "react";
 import { Upload, Image as ImageIcon, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
+import { nanoid } from "nanoid";
+import { Progress } from "@/components/ui/progress";
+import { useParams } from "react-router-dom";
+import { useScreens } from "@/hooks/useScreens";
 
 interface UploadScreensProps {
   onNext: (uploadedImages: UploadedImage[]) => void;
@@ -16,8 +19,10 @@ export interface UploadedImage {
 }
 
 const UploadScreens = ({ onNext }: UploadScreensProps) => {
+  const { projectId } = useParams<{ projectId: string }>();
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const { createScreens, isCreatingScreens, uploadProgress } = useScreens(projectId || "");
 
   const handleFileDrop = useCallback((acceptedFiles: File[]) => {
     const imageFiles = acceptedFiles.filter(file => 
@@ -30,7 +35,7 @@ const UploadScreens = ({ onNext }: UploadScreensProps) => {
     }
 
     const newImages = imageFiles.map(file => ({
-      id: Math.random().toString(36).substring(2, 11),
+      id: nanoid(),
       file,
       preview: URL.createObjectURL(file)
     }));
@@ -69,11 +74,19 @@ const UploadScreens = ({ onNext }: UploadScreensProps) => {
     });
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (uploadedImages.length === 0) {
       toast.error("Please upload at least one screen image");
       return;
     }
+
+    if (!projectId) {
+      toast.error("Project ID is missing");
+      return;
+    }
+
+    createScreens(uploadedImages);
+    
     onNext(uploadedImages);
   };
 
@@ -109,6 +122,7 @@ const UploadScreens = ({ onNext }: UploadScreensProps) => {
             onClick={() => document.getElementById('file-upload')?.click()}
             variant="outline"
             className="mt-2"
+            disabled={isCreatingScreens}
           >
             <ImageIcon className="mr-2 h-4 w-4" />
             Add Screens
@@ -132,6 +146,7 @@ const UploadScreens = ({ onNext }: UploadScreensProps) => {
                     size="icon" 
                     variant="destructive"
                     onClick={() => removeImage(image.id)}
+                    disabled={isCreatingScreens}
                   >
                     <XCircle className="h-5 w-5" />
                   </Button>
@@ -139,6 +154,12 @@ const UploadScreens = ({ onNext }: UploadScreensProps) => {
                 <div className="p-2 text-xs truncate">
                   {image.file.name}
                 </div>
+                {isCreatingScreens && uploadProgress[image.id] !== undefined && (
+                  <div className="px-2 pb-2">
+                    <Progress value={uploadProgress[image.id]} className="h-1" />
+                    <p className="text-xs text-right mt-1">{uploadProgress[image.id]}%</p>
+                  </div>
+                )}
               </Card>
             ))}
           </div>
@@ -149,9 +170,16 @@ const UploadScreens = ({ onNext }: UploadScreensProps) => {
         <Button
           onClick={handleNext}
           className="bg-indigo-600 hover:bg-indigo-700"
-          disabled={uploadedImages.length === 0}
+          disabled={uploadedImages.length === 0 || isCreatingScreens}
         >
-          Next
+          {isCreatingScreens ? (
+            <>
+              <Upload className="mr-2 h-4 w-4 animate-pulse" />
+              Uploading...
+            </>
+          ) : (
+            'Next'
+          )}
         </Button>
       </div>
     </div>

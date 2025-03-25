@@ -7,7 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { UploadedImage } from "./UploadScreens";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { useParams } from "react-router-dom";
+import { useScreens } from "@/hooks/useScreens";
+import { Screen } from "@/types/supabase";
 
 interface AddDocumentationProps {
   images: UploadedImage[];
@@ -16,16 +19,29 @@ interface AddDocumentationProps {
 }
 
 const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps) => {
-  const [documentation, setDocumentation] = useState<Record<string, string>>({});
+  const { projectId } = useParams<{ projectId: string }>();
+  const { 
+    screens, 
+    isLoadingScreens, 
+    updateScreenDocumentation,
+    isUpdatingDocumentation 
+  } = useScreens(projectId || "");
 
-  // Initialize documentation for all images
+  const [documentation, setDocumentation] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Initialize documentation from database screens
   useEffect(() => {
-    const initialDocs: Record<string, string> = {};
-    images.forEach(img => {
-      initialDocs[img.id] = documentation[img.id] || '';
-    });
-    setDocumentation(initialDocs);
-  }, [images]);
+    if (screens) {
+      const initialDocs: Record<string, string> = {};
+      screens.forEach(screen => {
+        if (screen.documentation) {
+          initialDocs[screen.id] = screen.documentation;
+        }
+      });
+      setDocumentation(initialDocs);
+    }
+  }, [screens]);
 
   const handleDocChange = (id: string, value: string) => {
     setDocumentation(prev => ({
@@ -34,19 +50,51 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
     }));
   };
 
-  const isComplete = () => {
-    return images.every(img => documentation[img.id]?.trim().length > 0);
+  const handleSaveDoc = async (id: string, value: string) => {
+    if (!projectId) return;
+    
+    updateScreenDocumentation({ screenId: id, documentation: value });
   };
 
-  const handleNext = () => {
+  const isComplete = () => {
+    return screens && screens.every(screen => documentation[screen.id]?.trim().length > 0);
+  };
+
+  const handleNext = async () => {
     if (!isComplete()) {
       toast.error("Please add documentation for all screens");
       return;
     }
-    onNext(images, documentation);
+
+    // Save all documentation to the database
+    setIsSaving(true);
+    try {
+      const savePromises = screens?.map(screen => 
+        handleSaveDoc(screen.id, documentation[screen.id])
+      ) || [];
+      
+      await Promise.all(savePromises);
+      
+      // Pass the screens with their documentation to the next step
+      onNext(images, documentation);
+    } catch (error) {
+      console.error("Error saving documentation:", error);
+      toast.error("Failed to save documentation");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  if (images.length === 0) {
+  if (isLoadingScreens) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+        <span className="ml-2 text-indigo-600">Loading screens...</span>
+      </div>
+    );
+  }
+
+  if (!screens || screens.length === 0) {
     return (
       <div className="text-center py-10">
         <p className="text-muted-foreground mb-4">No screen images to document.</p>
@@ -61,7 +109,7 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
     <div className="space-y-6">
       <div className="mb-4">
         <h3 className="text-lg font-medium">
-          Document All Screens ({images.length})
+          Document All Screens ({screens.length})
         </h3>
         <p className="text-sm text-muted-foreground mt-1">
           Add detailed documentation for each screen to generate better implementation plans.
@@ -69,8 +117,8 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
       </div>
 
       <div className="space-y-6">
-        {images.map((image, index) => (
-          <Card key={image.id} className="overflow-hidden">
+        {screens.map((screen, index) => (
+          <Card key={screen.id} className="overflow-hidden">
             <CardContent className="p-0">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-1 border-r border-border p-4">
@@ -78,7 +126,7 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
                     <DialogTrigger asChild>
                       <div className="cursor-pointer relative group">
                         <img
-                          src={image.preview}
+                          src={screen.image_path}
                           alt={`Screen ${index + 1}`}
                           className="w-full h-auto max-h-[180px] object-contain"
                         />
@@ -89,24 +137,24 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
                     </DialogTrigger>
                     <DialogContent className="max-w-3xl">
                       <img
-                        src={image.preview}
+                        src={screen.image_path}
                         alt={`Screen ${index + 1}`}
                         className="w-full h-auto max-h-[80vh] object-contain"
                       />
                     </DialogContent>
                   </Dialog>
                   <p className="text-sm text-muted-foreground mt-2 truncate">
-                    {image.file.name}
+                    Screen {index + 1}
                   </p>
                 </div>
                 
                 <div className="md:col-span-2 p-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor={`documentation-${image.id}`} className="text-base font-medium">
+                      <Label htmlFor={`documentation-${screen.id}`} className="text-base font-medium">
                         Screen {index + 1}
                       </Label>
-                      {documentation[image.id]?.trim() ? (
+                      {documentation[screen.id]?.trim() ? (
                         <span className="text-green-600 flex items-center text-xs">
                           <Check size={14} className="mr-1" /> Documented
                         </span>
@@ -115,12 +163,14 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
                       )}
                     </div>
                     <Textarea
-                      id={`documentation-${image.id}`}
+                      id={`documentation-${screen.id}`}
                       placeholder="Describe this screen's purpose, functionality, and any relevant details..."
                       rows={4}
-                      value={documentation[image.id] || ''}
-                      onChange={(e) => handleDocChange(image.id, e.target.value)}
+                      value={documentation[screen.id] || ''}
+                      onChange={(e) => handleDocChange(screen.id, e.target.value)}
+                      onBlur={(e) => handleSaveDoc(screen.id, e.target.value)}
                       className="resize-none"
+                      disabled={isUpdatingDocumentation}
                     />
                     <p className="text-xs text-muted-foreground">
                       Include component details, user interactions, and design specifications.
@@ -137,6 +187,7 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
         <Button
           variant="outline"
           onClick={onPrevious}
+          disabled={isSaving}
         >
           Back to Upload
         </Button>
@@ -144,9 +195,16 @@ const AddDocumentation = ({ images, onPrevious, onNext }: AddDocumentationProps)
         <Button
           onClick={handleNext}
           className="bg-indigo-600 hover:bg-indigo-700"
-          disabled={!isComplete()}
+          disabled={!isComplete() || isSaving}
         >
-          Next Step
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            'Next Step'
+          )}
         </Button>
       </div>
     </div>
