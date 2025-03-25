@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { UploadedImage } from "./UploadScreens";
 import { Screen } from "@/types/supabase";
 import { useScreens } from "@/hooks/useScreens";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ReactMarkdown from "react-markdown";
 import ImplementationPlaceholder from "./ImplementationPlaceholder";
+import { generateScreenPlan } from "@/services/openai";
 
 type PlanStatus = "NOT_GENERATED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -27,6 +28,7 @@ interface ImplementationPlansProps {
 
 const ImplementationPlans = ({ images, documentation, screens, onPrevious }: ImplementationPlansProps) => {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editData, setEditData] = useState<{ screenId: string; screenName: string; documentation: string; }>({
@@ -99,42 +101,23 @@ const ImplementationPlans = ({ images, documentation, screens, onPrevious }: Imp
       // This would typically be an API call, but we're mocking it for now
       // Set a timeout to simulate API call delay
       setTimeout(async () => {
-        const plan = `# Implementation Plan for ${screen.screen_name || 'Screen'}
+        try {
+          // Generate a plan using our mock service
+          const plan = await generateScreenPlan(screen);
 
-## Overview
-This screen represents ${screen.documentation?.slice(0, 100)}...
-
-## Components Required
-1. Header Section
-2. Main Content Area
-3. Input Fields
-4. Action Buttons
-
-## Implementation Steps
-1. Create the layout structure
-2. Implement the header component
-3. Add the main content area
-4. Style all elements according to design
-5. Add event handlers and logic
-
-## API Requirements
-- GET /api/data
-- POST /api/submit
-
-## Estimated Time
-4-6 hours
-
-## Notes
-Ensure responsive design across all device sizes.`;
-
-        // Update the plan in Supabase
-        await updateScreenPlan({ 
-          screenId, 
-          plan, 
-          status: "COMPLETED"
-        });
-        
-        toast.success(`Plan for "${screen.screen_name}" has been generated`);
+          // Update the plan in Supabase
+          await updateScreenPlan({ 
+            screenId, 
+            plan, 
+            status: "COMPLETED"
+          });
+          
+          toast.success(`Plan for "${screen.screen_name || 'Screen'}" has been generated`);
+        } catch (error) {
+          console.error("Error generating plan content:", error);
+          toast.error("Failed to generate plan content");
+          await updateScreenStatus({ screenId, status: "NOT_GENERATED" });
+        }
       }, 2000); // Simulate 2 second delay
       
     } catch (error) {
@@ -174,6 +157,11 @@ Ensure responsive design across all device sizes.`;
 
   const getSelectedScreen = () => {
     return screens.find(screen => screen.id === selectedScreenId);
+  };
+
+  const handleFinish = () => {
+    toast.success("Workflow completed successfully!");
+    navigate("/");
   };
 
   if (!screens || screens.length === 0) {
@@ -302,7 +290,7 @@ Ensure responsive design across all device sizes.`;
         </Button>
         
         <Button 
-          onClick={() => toast.success("Workflow completed successfully!")}
+          onClick={handleFinish}
           className="bg-indigo-600 hover:bg-indigo-700"
           disabled={!screens.every(screen => screen.plan_status === "COMPLETED")}
         >
