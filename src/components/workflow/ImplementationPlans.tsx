@@ -224,7 +224,6 @@ const ImplementationPlans = ({ images, documentation, screens, onPrevious }: Imp
                   <div className="flex justify-between items-center">
                     {renderStatus(screen.plan_status as PlanStatus)}
                     
-                    {/* Here's the fixed comparison - checking if the status is not "IN_PROGRESS" */}
                     {screen.plan_status !== "IN_PROGRESS" && (
                       <Button
                         size="sm"
@@ -232,21 +231,11 @@ const ImplementationPlans = ({ images, documentation, screens, onPrevious }: Imp
                         className={screen.plan_status === "COMPLETED" ? "" : "bg-indigo-600 hover:bg-indigo-700"}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (screen.plan_status !== "COMPLETED") {
-                            generatePlan(screen.id);
-                          } else {
-                            // If plan already exists, just select it
-                            setSelectedScreenId(screen.id);
-                          }
+                          generatePlan(screen.id);
                         }}
                         disabled={isUpdatingPlan || isUpdatingStatus}
                       >
-                        {screen.plan_status === "IN_PROGRESS" ? (
-                          <>
-                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                            Generating...
-                          </>
-                        ) : screen.plan_status === "COMPLETED" ? (
+                        {screen.plan_status === "COMPLETED" ? (
                           <>
                             <FileText size={14} className="mr-1" />
                             View Plan

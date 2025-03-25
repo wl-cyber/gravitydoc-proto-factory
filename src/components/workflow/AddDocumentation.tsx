@@ -86,42 +86,49 @@ const AddDocumentation = ({ images, screens, onPrevious, onNext }: AddDocumentat
 
   return (
     <div className="space-y-6">
-      <p className="text-muted-foreground mb-6">
-        Add detailed documentation for each screen to generate accurate implementation plans.
-      </p>
+      <div className="mb-6">
+        <h3 className="text-xl font-semibold text-indigo-700 mb-2">Document All Screens ({screens.length})</h3>
+        <p className="text-muted-foreground">
+          Add detailed documentation for each screen to generate better implementation plans.
+        </p>
+      </div>
       
-      <div className="space-y-6">
-        {screens.map((screen, index) => (
-          <Card key={screen.id} className="p-4 sm:p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-lg font-medium mb-2">Screen {index + 1}</h3>
-                <div className="aspect-video bg-muted rounded-md overflow-hidden">
-                  <img 
-                    src={screen.image_path} 
-                    alt={`Screen ${index + 1}`}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <h3 className="text-lg font-medium mb-2">Documentation</h3>
-                <Textarea
-                  value={documentation[screen.id] || ""}
-                  onChange={(e) => handleDocumentationChange(screen.id, e.target.value)}
-                  placeholder="Describe this screen in detail, including its purpose, components, and functionality..."
-                  className="flex-1 min-h-[200px]"
-                />
+      {screens.map((screen, index) => (
+        <Card key={screen.id} className="p-6 border border-muted">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="aspect-video bg-muted rounded-md overflow-hidden border">
+              <img 
+                src={screen.image_path} 
+                alt={`Screen ${index + 1}`}
+                className="w-full h-full object-contain"
+              />
+              <div className="p-2 text-xs text-muted-foreground text-center border-t">
+                {screen.image_path.split('/').pop() || `Screen ${index + 1}`}
               </div>
             </div>
-          </Card>
-        ))}
-      </div>
+            <div className="flex flex-col space-y-2">
+              <div className="flex justify-between items-center">
+                <h4 className="text-lg font-medium">Screen {index + 1}</h4>
+                <span className="text-xs text-amber-600 font-medium">Required</span>
+              </div>
+              <Textarea
+                value={documentation[screen.id] || ""}
+                onChange={(e) => handleDocumentationChange(screen.id, e.target.value)}
+                placeholder="Describe this screen's purpose, functionality, and any relevant details..."
+                className="flex-1 min-h-[220px] resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Include component details, user interactions, and design specifications.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ))}
       
       <div className="flex justify-between pt-4">
         <Button onClick={onPrevious} variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Previous
+          Back to Upload
         </Button>
         <Button 
           onClick={handleNext} 
@@ -135,7 +142,7 @@ const AddDocumentation = ({ images, screens, onPrevious, onNext }: AddDocumentat
             </>
           ) : (
             <>
-              Next
+              Next Step
               <ArrowRight className="ml-2 h-4 w-4" />
             </>
           )}
